@@ -13,7 +13,7 @@ void radio_clear_data(void);
 
 uint8_t radio_get_rssi(void);
 
-void radio_send_packet(uint8_t * data_ptr);
+void radio_send_packet(uint8_t * data_ptr, size_t size);
 
 uint8_t * radio_get_packet(void);
 

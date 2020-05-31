@@ -7,7 +7,6 @@
 #include "Utils/utils.h"
 #include "nRF52_Drivers/rtc/rtc.h"
 #include "nRF52_Drivers/uart/uart.h"
-#include "packets/packets.h"
 #include "radio.h"
 
 #define PACKET_BASE_ADDRESS_LENGTH  (4UL)
@@ -141,9 +140,9 @@ static volatile uint8_t * tx_data_ptr = NULL;
 
 
 
-void radio_send_packet(uint8_t * data_ptr)
+void radio_send_packet(uint8_t * data_ptr, size_t size)
 {
-    strcpy(tx_buffer, data_ptr);
+    memcpy(tx_buffer, data_ptr, size);
     tx_data_ptr = tx_buffer;
 }
 
@@ -158,7 +157,6 @@ uint8_t * radio_get_packet(void)
     {
         return NULL;
     }
-    
 }
 
 void radio_tick(void)
@@ -387,7 +385,6 @@ static void radio_set_prefix_addr(uint8_t prefix, uint8_t address)
         default:
             return;
     }
-    
 }
 
 static void radio_set_short(RadioShorts option)
@@ -398,10 +395,6 @@ static void radio_set_short(RadioShorts option)
 static void radio_clear_short(RadioShorts option)
 {
     NRF_RADIO->SHORTS &= ~(1UL << option);
-}
-
-void radio_set_mode_rx(void)
-{
 }
 
 static void radio_enable(void)
