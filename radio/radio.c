@@ -139,10 +139,6 @@ static volatile uint8_t rx_buffer[RX_PACKET_SIZE];
 static volatile uint8_t * rx_data_ptr = NULL;
 static volatile uint8_t * tx_data_ptr = NULL;
 
-static bool packet_crc_ok = false;
-static uint32_t packet_tx_counter;
-
-
 
 
 void radio_send_packet(uint8_t * data_ptr)
@@ -167,16 +163,11 @@ uint8_t * radio_get_packet(void)
 
 void radio_tick(void)
 {
-    // Note
-    // If there are no packets to be sent
-    // turn on receiver and wait for packets
-
     RadioState state = radio_get_state();
     switch (state)
     {        
         case RADIO_STATE_DISABLED:
         {
-            //uart_write_string("RADIO_STATE_DISABLED\r\n", 22);
             // Clear the flags.
             radio_clear_events_ready();
             radio_clear_events_disabled();
@@ -186,46 +177,38 @@ void radio_tick(void)
             {
                 radio_set_packet_ptr(tx_data_ptr);
                 radio_set_task_txen();
-                //art_write_string("Enable txen\r\n", 14);
                 tx_data_ptr = NULL;
             }
             else
             {
-                //uart_write_string("Enable rxen\r\n", 14);
                 radio_set_packet_ptr(rx_buffer);
                 // Enable the Receiver.
                 radio_set_task_rxen();
             }
-            break;
+            return;
         }
-
         case RADIO_STATE_RXDISABLE:
         {            
-            break;
+            return;
         }
-
         case RADIO_STATE_RXRU:
         {
             // If READY_START are shorted
             // radio will jump to RX STATE and not
             // to RXIDLE.
-            break;
+            return;
         }
-
         case RADIO_STATE_RXIDLE:
         {
-            //uart_write_string("RADIO_STATE_RXIDLE\r\n", 20);
             // If we are in RXIDLE STATE it means a packet
             // has been received in the past and actions need
             // to be done.
-
             // If there is a packet available to be sent we need
             // to go in TX mode and send it.
             if (tx_data_ptr != NULL)
             {
                 radio_clear_events_end();
                 radio_set_packet_ptr(tx_buffer);
-                //uart_write_string("enable txen\r\n", 14);
                 radio_set_task_txen();
                 tx_data_ptr = NULL;
             }
@@ -240,31 +223,24 @@ void radio_tick(void)
                 radio_set_packet_ptr(rx_buffer);
                 radio_set_task_start();
             }       
-            break;
+            return;
         }
-
         case RADIO_STATE_RX:
         {
             // Receiving packet...
             if (tx_data_ptr != NULL)
             {
-                radio_set_task_stop();    
-                radio_set_packet_ptr(tx_buffer);            
-                //uart_write_string("RX STOP\r\n", 10);
+                radio_set_task_stop();              
             }
-            break;
+            return;
         }
-
         case RADIO_STATE_TXRU:
         {
             // Radio is going to send the packet.
-            //uart_write_string("RADIO_STATE_TXRU\r\n", 19);
-            break;
+            return;
         }
-
         case RADIO_STATE_TXIDLE:
         {
-            //uart_write_string("RADIO_STATE_TXIDLE\r\n", 20);
             // If we are in TXIDLE STATE it means the radio
             // has transmitted a packet in the past.
             // We have to check if there's another packet to be sent
@@ -278,28 +254,23 @@ void radio_tick(void)
                 radio_set_packet_ptr(rx_buffer);
                 radio_set_task_rxen();
             }
-            break;
+            return;
         }
-
         case RADIO_STATE_TX:
         {
             // Radio is transmitting the packet.
-            //uart_write_string("Packet is being sent\r\n", 23);
-            break;
+            return;
         }
-
         case RADIO_STATE_TXDISABLE:
         {
-            break;
+            return;
         }
-    
         default:
         {
             return;
         }
             
     } 
-
     return;
 }
 
@@ -349,26 +320,6 @@ void radio_init(void)
 
     radio_set_short(RADIO_SHORT_READY_START);
     radio_set_short(RADIO_SHORT_ADDRESS_RSSISTART);
-    //radio_set_short(RADIO_SHORT_END_DISABLE);
-
-    // struct packet packet;
-    // packet.destination_address = 0x1234;
-    // packet.sender_address = 0x4321;
-    // packet.uid = 0x87;
-    // packet.payload_length = sprintf(packet.payload, "Packet: %d", packet_tx_counter++);
-    // packet_create(&packet, tx_buffer);
-    // tx_data_ptr = tx_buffer;
-}
-
-
-bool radio_get_crc_status(void)
-{
-    return packet_crc_ok;
-}
-
-void radio_clear_crc_status(void)
-{
-    packet_crc_ok = false;
 }
 
 
@@ -556,21 +507,16 @@ uint8_t radio_get_rssi(void)
     return NRF_RADIO->RSSISAMPLE;
 }
 
-
-
 void RADIO_IRQHandler(void)
 {
 }
 
 
-
-
-
-
-
+// Old functions
 
 void send_packet_blocking(void)
 {
+    static uint32_t packet_tx_counter = 0;
     sprintf((uint8_t *)tx_buffer, "Hello world: %lu", packet_tx_counter++);
 
     NRF_RADIO->PACKETPTR = (uint32_t)&tx_buffer[0];
@@ -637,58 +583,4 @@ uint32_t read_packet(void)
         // wait
     }
     return packet;
-}
-
-
-
-
-void radio_configure()
-{
-    // Radio config
-    NRF_RADIO->TXPOWER   = (RADIO_TXPOWER_TXPOWER_0dBm << RADIO_TXPOWER_TXPOWER_Pos);
-    NRF_RADIO->FREQUENCY = 7UL;  // Frequency bin 7, 2407MHz
-    NRF_RADIO->MODE      = (RADIO_MODE_MODE_Nrf_1Mbit << RADIO_MODE_MODE_Pos);
-
-    // Radio address config
-    NRF_RADIO->PREFIX0 =
-        ((uint32_t)swap_bits(0xC3) << 24) // Prefix byte of address 3 converted to nRF24L series format
-      | ((uint32_t)swap_bits(0xC2) << 16) // Prefix byte of address 2 converted to nRF24L series format
-      | ((uint32_t)swap_bits(0xC1) << 8)  // Prefix byte of address 1 converted to nRF24L series format
-      | ((uint32_t)swap_bits(0xC0) << 0); // Prefix byte of address 0 converted to nRF24L series format
-
-    NRF_RADIO->PREFIX1 =
-        ((uint32_t)swap_bits(0xC7) << 24) // Prefix byte of address 7 converted to nRF24L series format
-      | ((uint32_t)swap_bits(0xC6) << 16) // Prefix byte of address 6 converted to nRF24L series format
-      | ((uint32_t)swap_bits(0xC4) << 0); // Prefix byte of address 4 converted to nRF24L series format
-
-    NRF_RADIO->BASE0 = bytewise_bitswap(0x01234567UL);  // Base address for prefix 0 converted to nRF24L series format
-    NRF_RADIO->BASE1 = bytewise_bitswap(0x89ABCDEFUL);  // Base address for prefix 1-7 converted to nRF24L series format
-
-    NRF_RADIO->TXADDRESS   = 0x00UL;  // Set device address 0 to use when transmitting
-    NRF_RADIO->RXADDRESSES = 0x01UL;  // Enable device address 0 to use to select which addresses to receive
-
-    // Packet configuration
-    NRF_RADIO->PCNF0 = (PACKET_S1_FIELD_SIZE     << RADIO_PCNF0_S1LEN_Pos) |
-                       (PACKET_S0_FIELD_SIZE     << RADIO_PCNF0_S0LEN_Pos) |
-                       (PACKET_LENGTH_FIELD_SIZE << RADIO_PCNF0_LFLEN_Pos); //lint !e845 "The right argument to operator '|' is certain to be 0"
-
-    // Packet configuration
-    NRF_RADIO->PCNF1 = (RADIO_PCNF1_WHITEEN_Disabled << RADIO_PCNF1_WHITEEN_Pos) |
-                       (RADIO_PCNF1_ENDIAN_Big       << RADIO_PCNF1_ENDIAN_Pos)  |
-                       (PACKET_BASE_ADDRESS_LENGTH   << RADIO_PCNF1_BALEN_Pos)   |
-                       (PACKET_STATIC_LENGTH         << RADIO_PCNF1_STATLEN_Pos) |
-                       (PACKET_PAYLOAD_MAXSIZE       << RADIO_PCNF1_MAXLEN_Pos); //lint !e845 "The right argument to operator '|' is certain to be 0"
-
-    // CRC Config
-    NRF_RADIO->CRCCNF = (RADIO_CRCCNF_LEN_Two << RADIO_CRCCNF_LEN_Pos); // Number of checksum bits
-    if ((NRF_RADIO->CRCCNF & RADIO_CRCCNF_LEN_Msk) == (RADIO_CRCCNF_LEN_Two << RADIO_CRCCNF_LEN_Pos))
-    {
-        NRF_RADIO->CRCINIT = 0xFFFFUL;   // Initial value
-        NRF_RADIO->CRCPOLY = 0x11021UL;  // CRC poly: x^16 + x^12^x^5 + 1
-    }
-    else if ((NRF_RADIO->CRCCNF & RADIO_CRCCNF_LEN_Msk) == (RADIO_CRCCNF_LEN_One << RADIO_CRCCNF_LEN_Pos))
-    {
-        NRF_RADIO->CRCINIT = 0xFFUL;   // Initial value
-        NRF_RADIO->CRCPOLY = 0x107UL;  // CRC poly: x^8 + x^2^x^1 + 1
-    }
 }

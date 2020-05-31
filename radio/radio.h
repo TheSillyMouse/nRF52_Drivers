@@ -11,10 +11,6 @@ uint8_t * radio_get_data(void);
 
 void radio_clear_data(void);
 
-bool radio_get_crc_status(void);
-
-void radio_clear_crc_status(void);
-
 uint8_t radio_get_rssi(void);
 
 void radio_send_packet(uint8_t * data_ptr);
