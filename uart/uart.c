@@ -46,7 +46,7 @@ void uart_write_string(uint8_t * str, int size)
         NRF_UART0->TXD = *str;
         NRF_UART0->EVENTS_TXDRDY = 0;
         str++;
-        while((NRF_UART0->EVENTS_TXDRDY != 1) && *str != 0);
+        while((NRF_UART0->EVENTS_TXDRDY != 1));
         size--;
     }while(size);
 }
